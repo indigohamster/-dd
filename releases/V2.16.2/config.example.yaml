@@ -1,0 +1,127 @@
+# OpsPilot 企业运维助手：安全空白发行模板
+# 本模板不包含真实凭证、企业人员信息、企业知识库或本机绝对路径。
+
+credentials:
+  client_id: ""
+  client_secret: ""
+  app_id: ""
+  agent_id: ""
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+  datefmt: "%Y-%m-%d %H:%M:%S"
+
+chat:
+  auto_echo: false
+  enable_p2p: true
+  enable_group: true
+  keyword_filter: []
+
+ticket:
+  enabled: true
+  database_path: "data/tickets.db"
+  integrity_check: true
+  busy_timeout_ms: 5000
+  backup_enabled: true
+  backup_dir: "data/backups"
+  backup_retention_days: 30
+  triage:
+    enabled: true
+    min_description_length: 30
+    ttl_seconds: 1800
+  incident_window_hours: 8
+  followup_delay_hours: 24
+  admins: []
+
+weekly_report:
+  recipients: []
+
+daily_ops_summary:
+  enabled: false
+  hour: 9
+
+events:
+  enabled: true
+  subscribed_events: []
+
+ima:
+  enabled: false
+  client_id: ""
+  api_key: ""
+  default_knowledge_bases: []
+  expert_triggers:
+    - phrase: "召唤运维专家"
+      description: "搜索管理员已经配置的知识库"
+      scope: "default"
+  trigger_keywords:
+    - "搜"
+    - "查"
+    - "找"
+    - "知识库"
+  max_results: 5
+
+admin_ui:
+  enabled: true
+  port: 8765
+  auto_open: true
+  threads: 8
+
+problem_resolution:
+  enabled: true
+  max_failures_before_ticket: 2
+  ttl_seconds: 1800
+
+knowledge_loop:
+  enabled: true
+  database_path: "data/knowledge_loop.db"
+  export_dir: "data/knowledge_exports"
+  publish_mode: "markdown_export"
+
+spreadsheet:
+  enabled: false
+  max_file_mb: 20
+  timeout: 90
+  max_concurrent: 2
+  queue_timeout: 10
+  verify_render: false
+  node_executable: ""
+  node_modules_path: ""
+
+async_tasks:
+  database_path: "data/tasks.db"
+  max_workers: 2
+
+ticket_notifications:
+  enabled: true
+
+observability:
+  enabled: true
+  database_path: "data/observability.db"
+  retention_days: 30
+
+llm:
+  enabled: false
+  provider: "deepseek"
+  api_key: ""
+  model: "deepseek-chat"
+  base_url: "https://api.deepseek.com"
+  chat_completions_path: "/v1/chat/completions"
+  temperature: 0.3
+  max_tokens: 1024
+  timeout: 30
+
+codebuddy:
+  enabled: false
+  auto_start: false
+  password: ""
+  host: "127.0.0.1"
+  port: 8080
+  timeout: 30
+
+vision:
+  enabled: false
+
+voice:
+  enabled: true
+  model: "base"

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>企业运维助手 · 管理中心</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/styles-v21.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">O</span><div><strong>OpsPilot</strong><small>企业运维助手</small></div></div>
+    <nav>
+      <button class="nav active" data-view="overview">总览</button>
+      <button class="nav" data-view="dashboard">每日驾驶舱</button>
+      <button class="nav" data-view="tickets">工单工作台</button>
+      <button class="nav" data-view="api">AI API</button>
+      <button class="nav" data-view="models">多模型路由</button>
+      <button class="nav" data-view="connectors">连接器</button>
+      <button class="nav" data-view="people">人员</button>
+      <button class="nav" data-view="response">回答策略</button>
+      <button class="nav" data-view="knowledge">知识闭环</button>
+      <button class="nav" data-view="history">配置历史</button>
+    </nav>
+    <div class="local-note">仅限本机访问<br><span>127.0.0.1</span></div>
+  </aside>
+  <main>
+    <header><div><p class="eyebrow">ENTERPRISE OPERATIONS</p><h1 id="page-title">运行总览</h1></div><div class="status-pill"><i></i><span id="runtime-label">正在读取状态</span></div></header>
+
+    <section class="view active" id="overview">
+      <div class="hero"><div><p>今日工作台</p><h2>让重复运维工作自动流转</h2><span>统一管理机器人、模型、连接器与服务人员。</span></div><div class="version" id="version">—</div></div>
+      <div class="metrics">
+        <article><span>已处理消息</span><strong id="message-count">0</strong><small>当前运行周期</small></article>
+        <article><span>活动工单会话</span><strong id="session-count">0</strong><small>等待跟进</small></article>
+        <article><span>已配置连接器</span><strong id="connector-count">0</strong><small>数据与消息入口</small></article>
+        <article><span>服务人员</span><strong id="people-count">0</strong><small>可分配负责人</small></article>
+      </div>
+      <div class="panel"><div class="panel-head"><div><p>服务健康</p><h3>核心组件</h3></div><button class="ghost" onclick="loadOverview()">刷新状态</button></div><div class="health-grid" id="health-grid"></div></div>
+    </section>
+
+    <section class="view" id="dashboard">
+      <div class="section-intro"><div><p>DAILY OPERATIONS</p><h2>每日运维驾驶舱</h2><span>集中查看今日工单、逾期风险、重复故障与知识缺口。</span></div><button class="ghost" onclick="loadDashboard()">刷新</button></div>
+      <div class="metrics">
+        <article><span>今日新增</span><strong id="dash-created">0</strong><small>员工提交工单</small></article>
+        <article><span>今日解决</span><strong id="dash-resolved">0</strong><small>已完成处理</small></article>
+        <article><span>当前待办</span><strong id="dash-pending">0</strong><small>待分派或处理中</small></article>
+        <article><span>逾期工单</span><strong id="dash-overdue">0</strong><small>需要优先跟进</small></article>
+        <article><span>高优先级</span><strong id="dash-urgent">0</strong><small>紧急与高优先级</small></article>
+        <article><span>平均解决耗时</span><strong id="dash-avg">0h</strong><small>今日已解决工单</small></article>
+        <article><span>知识缺口</span><strong id="dash-gaps">0</strong><small>回答后仍未解决</small></article>
+        <article><span>低效知识</span><strong id="dash-low">0</strong><small>失败多于成功</small></article>
+      </div>
+      <div class="ticket-layout">
+        <div class="panel table-wrap"><div class="panel-head"><div><p>ATTENTION</p><h3>逾期与高优先级工单</h3></div></div><table><thead><tr><th>编号</th><th>标题</th><th>优先级</th><th>负责人</th></tr></thead><tbody id="dash-tickets"></tbody></table></div>
+        <div class="panel table-wrap"><div class="panel-head"><div><p>PATTERNS</p><h3>今日重复故障</h3></div></div><table><thead><tr><th>问题</th><th>分类</th><th>次数</th></tr></thead><tbody id="dash-repeated"></tbody></table></div>
+      </div>
+      <div class="ticket-layout top-gap">
+        <div class="panel table-wrap"><div class="panel-head"><div><p>KNOWLEDGE GAPS</p><h3>未解决问题</h3></div></div><table><thead><tr><th>问题</th><th>关联工单</th><th>时间</th></tr></thead><tbody id="dash-knowledge-gaps"></tbody></table></div>
+        <div class="panel table-wrap"><div class="panel-head"><div><p>KNOWLEDGE HEALTH</p><h3>低效知识来源</h3></div></div><table><thead><tr><th>知识</th><th>成功</th><th>失败</th><th>成功率</th></tr></thead><tbody id="dash-low-sources"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="view" id="tickets"><div class="section-intro"><div><p>SERVICE DESK</p><h2>工单工作台</h2><span>筛选、分派、处理和关闭企业运维工单。</span></div><div class="segmented"><button onclick="loadTickets('all')">全部</button><button onclick="loadTickets('pending')">处理中</button><button onclick="loadTickets('done')">已完成</button></div></div><div class="ticket-layout"><div class="panel table-wrap"><table><thead><tr><th>编号</th><th>标题</th><th>状态</th><th>优先级</th><th>负责人</th><th>创建时间</th></tr></thead><tbody id="ticket-list"></tbody></table></div><aside class="panel ticket-detail" id="ticket-detail"><p class="empty">选择工单查看详情</p></aside></div></section>
+
+    <section class="view" id="api">
+      <div class="section-intro"><div><p>MODEL GATEWAY</p><h2>自定义 AI API</h2><span>支持 DeepSeek 及 OpenAI 兼容服务。密钥不会在页面回显。</span></div><button class="primary" onclick="saveLlm()">保存配置</button></div>
+      <div class="form-panel">
+        <label class="switch-row">启用 AI API <input id="llm-enabled" type="checkbox"><span class="switch"></span></label>
+        <div class="form-grid"><label>Base URL<input id="llm-url" placeholder="https://api.deepseek.com"></label><label>接口路径<input id="llm-path" placeholder="/v1/chat/completions"></label><label>模型名称<input id="llm-model" placeholder="deepseek-chat"></label><label>API Key<input id="llm-key" type="password" placeholder="留空则保留现有密钥"></label><label>Temperature<input id="llm-temperature" type="number" min="0" max="2" step="0.1"></label><label>最大 Token<input id="llm-max-tokens" type="number" min="64"></label><label>超时（秒）<input id="llm-timeout" type="number" min="1"></label></div>
+        <div class="form-actions"><button class="secondary" onclick="testLlm()">测试连接</button><span id="llm-mask"></span></div>
+      </div>
+    </section>
+
+    <section class="view" id="models"><div class="section-intro"><div><p>MODEL ROUTING</p><h2>多模型与备用路由</h2><span>为不同任务选择首选模型，并在失败时自动切换备用模型。</span></div><button class="primary" onclick="addModel()">添加模型</button></div><div class="form-panel"><div class="form-grid"><label>普通问答<select id="route-general"></select></label><label>工单分析<select id="route-ticket"></select></label><label>图片理解<select id="route-vision"></select></label><label>全局备用模型<select id="route-fallback"></select></label></div><button class="primary" onclick="saveModels()">保存路由</button></div><div id="model-list" class="card-list top-gap"></div></section>
+
+    <section class="view" id="connectors"><div class="section-intro"><div><p>INTEGRATIONS</p><h2>连接器</h2><span>统一管理钉钉、知识库和企业 HTTP 服务。</span></div><button class="primary" onclick="addConnector()">添加连接器</button></div><div id="connector-list" class="card-list"></div></section>
+    <section class="view" id="people"><div class="section-intro"><div><p>PEOPLE & ROUTING</p><h2>人员与职责</h2><span>设置运维负责人、部门和擅长领域，为自动派单做准备。</span></div><button class="primary" onclick="addPerson()">添加人员</button></div><div id="people-list" class="card-list"></div></section>
+
+    <section class="view" id="response"><div class="section-intro"><div><p>RESPONSE POLICY</p><h2>回答策略</h2><span>定义机器人的身份、语气、边界和转人工规则。</span></div><button class="primary" onclick="saveResponse()">保存策略</button></div><div class="form-panel"><div class="form-grid"><label>助手名称<input id="resp-name"></label><label>回答语气<input id="resp-tone"></label><label>回答长度<select id="resp-length"><option>简短</option><option>适中</option><option>详细</option></select></label><label class="switch-row compact">使用表情<input id="resp-emoji" type="checkbox"><span class="switch"></span></label><label class="switch-row compact">引用知识来源<input id="resp-cite" type="checkbox"><span class="switch"></span></label></div><label>不确定时的处理方式<textarea id="resp-uncertain"></textarea></label><label>转人工规则<textarea id="resp-handoff"></textarea></label><label>自定义系统指令<textarea id="resp-prompt" rows="5"></textarea></label></div></section>
+    <section class="view" id="knowledge"><div class="section-intro"><div><p>KNOWLEDGE FLYWHEEL</p><h2>知识闭环</h2><span>从真实解决记录生成草稿，审核后同步到 IMA。</span></div><div class="segmented"><button onclick="loadKnowledge('')">全部</button><button onclick="loadKnowledge('draft')">待审核</button><button onclick="loadKnowledge('published')">已发布</button></div></div><div class="metrics"><article><span>知识候选</span><strong id="knowledge-total">0</strong><small>来自工单和成功回答</small></article><article><span>未解决问题</span><strong id="knowledge-unresolved">0</strong><small>等待补充知识</small></article><article><span>低效来源</span><strong id="knowledge-low">0</strong><small>失败次数较高</small></article><article><span>同步方式</span><strong style="font-size:18px">审核导出</strong><small>Markdown → IMA</small></article></div><div class="ticket-layout"><div class="panel table-wrap"><table><thead><tr><th>编号</th><th>标题</th><th>状态</th><th>质量分</th><th>重复建议</th></tr></thead><tbody id="knowledge-list"></tbody></table></div><aside class="panel ticket-detail" id="knowledge-detail"><p class="empty">选择知识草稿进行审核</p></aside></div><div class="panel table-wrap top-gap"><div class="panel-head"><div><p>KNOWLEDGE HEALTH</p><h3>IMA 来源效果</h3></div></div><table><thead><tr><th>知识标题</th><th>知识库</th><th>使用</th><th>解决</th><th>未解决</th><th>成功率</th></tr></thead><tbody id="knowledge-metrics"></tbody></table></div></section>
+
+    <section class="view" id="history"><div class="section-intro"><div><p>CHANGE CONTROL</p><h2>配置版本历史</h2><span>每次保存前自动创建快照，可恢复 API、连接器、人员和回答策略。</span></div><button class="ghost" onclick="loadHistory()">刷新</button></div><div class="panel table-wrap"><table><thead><tr><th>时间</th><th>配置区域</th><th>说明</th><th>操作</th></tr></thead><tbody id="history-list"></tbody></table></div></section>
+  </main>
+  <div id="toast"></div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

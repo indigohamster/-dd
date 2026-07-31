@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# 可选：仅在钉钉消息没有自带识别文本、且需要本地语音兜底时安装。
+# 运行机器还需要可用的 ffmpeg。
+openai-whisper>=20231117

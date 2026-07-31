@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/*.log
+logs/messages/*.jsonl
+
+# Local config
+config.yaml
+*.setup-draft.yaml
+config.local.yaml
+config.prod.yaml
+.env
+
+# Runtime state and local assistant data
+data/
+.codebuddy/
+
+# Database backups
+*.db.bak
+*.db-journal
+
+# PyInstaller
+*.spec
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local patch/scratch artifacts
+patch_*.py
+nul
+
+# Legacy snapshots containing retired environment material. Keep only in a
+# controlled internal archive; never add them to an external source repository.
+releases/V1.6.0/
+releases/V1.7.0/
+releases/V1.7.1/

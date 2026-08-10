@@ -54,4 +54,4 @@ OpsPilot 是一个基于钉钉 Stream 的企业 AI 运维助手，面向企业�
 
 ## 当前版本
 
-OpsPilot V2.17.3
+OpsPilot V2.17.4

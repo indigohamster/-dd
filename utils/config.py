@@ -96,6 +96,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "api_key": "",
         "default_knowledge_bases": [],
     },
+    "problem_understanding": {
+        "enabled": False,
+        "mode": "shadow",
+        "sample_rate": 1.0,
+        "model_route": "general",
+        "timeout": 10,
+        "min_confidence": 0.55,
+        "max_candidate_knowledge_bases": 3,
+        "log_path": "data/problem_understanding_shadow.jsonl",
+        "metrics_path": "data/problem_understanding_shadow_metrics.json",
+    },
     "llm": {
         "enabled": False,
         "provider": "openai_compatible",

@@ -47,6 +47,7 @@ from modules.problem_resolution import ProblemResolutionEngine
 from modules.knowledge_loop import KnowledgeLoopStore
 from modules.conversation_state import ConversationStateStore
 from modules.issue import IssueService
+from modules.problem_understanding import ProblemUnderstandingService
 from modules.vision_analysis import VisionAnalysisService
 from utils.config import _get_base_dir
 from utils.spreadsheet_service import SpreadsheetService
@@ -202,6 +203,13 @@ class BotMessageHandler(ChatbotHandler):
             else:
                 self.logger.warning("LLM 已启用但地址、模型或认证配置不完整，AI 对话不可用")
         self.model_router = ModelRouter(llm_config, logger)
+        self.problem_understanding = ProblemUnderstandingService(
+            config.get("problem_understanding", {}),
+            ima_config,
+            self.model_router,
+            base_dir=_get_base_dir(),
+            logger=logger,
+        )
         self.vision_service = VisionAnalysisService(self.model_router, logger)
         self.vision_enabled = config.get("vision", {}).get("enabled", True) is not False
         self.voice_enabled = config.get("voice", {}).get("enabled", True) is not False
@@ -483,6 +491,44 @@ class BotMessageHandler(ChatbotHandler):
 
         # default / 其他 scope
         return default_kbs
+
+    def _submit_problem_understanding_shadow(
+        self,
+        info: dict,
+        *,
+        original_message: str,
+        legacy_action: str,
+        active_state_type: str = "none",
+        active_expert: dict | None = None,
+        legacy_kbs: list | None = None,
+    ) -> bool:
+        """Observe the legacy decision asynchronously without changing it."""
+        service = getattr(self, "problem_understanding", None)
+        if not service or not service.enabled:
+            return False
+        if legacy_kbs is None:
+            legacy_kbs = self._resolve_target_kbs(active_expert)
+        kb_ids = [
+            str(item.get("id") or "")
+            for item in (legacy_kbs or []) if isinstance(item, dict) and item.get("id")
+        ]
+        try:
+            return service.submit_shadow(
+                message=original_message,
+                legacy_action=legacy_action,
+                legacy_candidate_kb_ids=kb_ids,
+                active_state_type=active_state_type,
+                # Phase 1 reserves these inputs but intentionally does not add
+                # another conversation-state store beside Issue/resolution.
+                working_summary="",
+                pending_clarification="",
+                last_understanding=None,
+                message_id=info.get("msg_id", ""),
+                session_key=self._user_session_key(info),
+            )
+        except Exception as exc:
+            self.logger.warning("提交问题理解shadow任务失败: %s", exc.__class__.__name__)
+            return False
 
     # ------------------------------------------------------------------
     # 专家模式管理（退出/切换/列表/意图检测）
@@ -2640,6 +2686,7 @@ class BotMessageHandler(ChatbotHandler):
         content = info["content"].strip()
         if not content:
             return AckMessage.STATUS_OK, "OK"
+        original_user_content = content
 
         expert_triggers = self.ima_config.get("expert_triggers", [])
         trigger_keywords = self.ima_config.get("trigger_keywords", [])
@@ -2710,12 +2757,27 @@ class BotMessageHandler(ChatbotHandler):
         if self.ticket_enabled and self.triage_engine.has_session(session_key):
             result = self.triage_engine.consume(session_key, content)
             if result["status"] == "cancelled":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="continue_current_state",
+                    active_state_type="ticket_triage", legacy_kbs=[],
+                )
                 self.reply_text("✅ 已取消本次报修问诊，未创建工单。", msg)
                 return AckMessage.STATUS_OK, "OK"
             if result["status"] == "question":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="continue_current_state",
+                    active_state_type="ticket_triage", legacy_kbs=[],
+                )
                 self.reply_text(result["message"], msg)
                 return AckMessage.STATUS_OK, "OK"
             if result["status"] == "completed":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="defer_to_ticket_parser",
+                    active_state_type="ticket_triage", legacy_kbs=[],
+                )
                 info["content"] = result["description"]
                 info["triage_completed"] = True
                 info["triage_category"] = result["category"]
@@ -2744,10 +2806,20 @@ class BotMessageHandler(ChatbotHandler):
                 # through normal intent routing as a fresh question.
                 self.conversation_states.pop_feedback(session_key)
             if resolution["action"] == "cancel":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="continue_current_state",
+                    active_state_type="problem_resolution", legacy_kbs=[],
+                )
                 self.conversation_states.pop_feedback(session_key)
                 self.reply_text("✅ 已结束本次问题处理。如需继续，直接重新描述问题即可。", msg)
                 return AckMessage.STATUS_OK, "OK"
             if resolution["action"] == "resolved":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="continue_current_state",
+                    active_state_type="problem_resolution", legacy_kbs=[],
+                )
                 self._record_knowledge_outcome(session_key, True)
                 self.conversation_states.pop_feedback(session_key)
                 self.reply_text(
@@ -2756,6 +2828,11 @@ class BotMessageHandler(ChatbotHandler):
                 )
                 return AckMessage.STATUS_OK, "OK"
             if resolution["action"] == "escalate":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="handoff",
+                    active_state_type="problem_resolution", legacy_kbs=[],
+                )
                 self._record_knowledge_outcome(session_key, False)
                 self.conversation_states.pop_feedback(session_key)
                 self._auto_escalate_issue(msg, info, resolution)
@@ -2864,9 +2941,17 @@ class BotMessageHandler(ChatbotHandler):
         if self.resolution_enabled and not resolution_continuation:
             resolution = self.resolution_engine.begin(session_key, content)
             if resolution["action"] == "clarify":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="ask_clarification", legacy_kbs=[],
+                )
                 self.reply_text(resolution["message"], msg)
                 return AckMessage.STATUS_OK, "OK"
             if resolution["action"] == "escalate":
+                self._submit_problem_understanding_shadow(
+                    info, original_message=original_user_content,
+                    legacy_action="handoff", legacy_kbs=[],
+                )
                 self._auto_escalate_issue(msg, info, resolution)
                 return AckMessage.STATUS_OK, "OK"
 
@@ -2874,9 +2959,23 @@ class BotMessageHandler(ChatbotHandler):
         if self.llm_client or self.cb_client:
             active_expert = self._get_expert_state(session_key)
             self._handle_ai_chat(msg, info, active_expert)
+            # Submit only after the production answer call has completed so
+            # shadow traffic cannot race the user-facing model request.
+            self._submit_problem_understanding_shadow(
+                info,
+                original_message=original_user_content,
+                legacy_action=("continue_current_state" if resolution_continuation
+                               else "retrieve_and_answer"),
+                active_state_type=("problem_resolution" if resolution_continuation else "none"),
+                active_expert=active_expert,
+            )
             return AckMessage.STATUS_OK, "OK"
 
         # 9. 没有配置 LLM 时的默认处理
+        self._submit_problem_understanding_shadow(
+            info, original_message=original_user_content,
+            legacy_action="legacy_fallback", legacy_kbs=[],
+        )
         self._handle_default(msg, info)
         return AckMessage.STATUS_OK, "OK"
 

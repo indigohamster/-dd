@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # ============================================================
 # OpsPilot 企业运维助手 - 主入口
-# 版本: V2.17.3
+# 版本: V2.17.4
 # ============================================================
 #
 # 启动方式:
@@ -440,6 +440,7 @@ def main():
         except Exception:
             pass
         chat_handler.task_queue.shutdown(wait=False)
+        chat_handler.problem_understanding.shutdown(wait=False)
         loop.stop()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -464,6 +465,7 @@ def main():
         except Exception:
             pass
         chat_handler.task_queue.shutdown(wait=False)
+        chat_handler.problem_understanding.shutdown(wait=False)
         loop.stop()
         sys.exit(0)
 
@@ -540,6 +542,10 @@ def main():
             chat_handler.task_queue.shutdown(wait=False)
         except Exception:
             logger.warning("关闭后台任务队列失败", exc_info=True)
+        try:
+            chat_handler.problem_understanding.shutdown(wait=False)
+        except Exception:
+            logger.warning("关闭问题理解 shadow 队列失败", exc_info=True)
         if admin_server_thread is not None:
             try:
                 admin_server_thread.opspilot_stop()

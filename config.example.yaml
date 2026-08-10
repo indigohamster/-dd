@@ -51,7 +51,17 @@ ima:
   api_key: ""
   # 建议填写知识库中必定存在正文的业务关键词，用于真实性健康检查
   health_check_query: ""
+  # 每个知识库都建议维护以下业务元数据。问题理解层只读取配置，
+  # 不会根据名称猜测或编造简介、标签、覆盖范围和示例问题。
   default_knowledge_bases: []
+    # - id: "your-knowledge-base-id"
+    #   name: "知识库显示名称"
+    #   description: "这套知识主要解决什么问题"
+    #   tags: ["业务系统", "操作指导"]
+    #   coverage: "适用部门、系统、流程及不覆盖的边界"
+    #   example_questions:
+    #     - "一个真实但不含敏感数据的示例问题"
+    #   enabled: true
   expert_triggers:
     - phrase: "召唤运维专家"
       description: "搜索管理员已经配置的知识库"
@@ -62,6 +72,19 @@ ima:
     - "找"
     - "知识库"
   max_results: 5
+
+# Phase 1 只做影子判断和对比记录，不改变回复、分流或检索范围。
+problem_understanding:
+  enabled: false
+  mode: "shadow"
+  # 0 = no sampling, 1 = all eligible messages; supports decimals such as 0.2.
+  sample_rate: 1.0
+  model_route: "general"
+  timeout: 10
+  min_confidence: 0.55
+  max_candidate_knowledge_bases: 3
+  log_path: "data/problem_understanding_shadow.jsonl"
+  metrics_path: "data/problem_understanding_shadow_metrics.json"
 
 admin_ui:
   enabled: true

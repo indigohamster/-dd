@@ -13,19 +13,23 @@ class ModelRouter:
         self.logger = logger
         self.settings_store = settings_store or AdminSettingsStore()
 
-    def _client(self, profile):
+    def _client(self, profile, request_options=None):
         base = self.base
+        options = request_options or {}
         return DeepSeekClient(
             api_key=resolve_scoped_api_key(profile, base=base),
             model=profile.get("model") or base.get("model", "deepseek-chat"),
             base_url=profile.get("base_url") or base.get("base_url", ""),
             chat_completions_path=profile.get("chat_completions_path") or base.get("chat_completions_path", "/v1/chat/completions"),
-            temperature=profile.get("temperature", base.get("temperature", 0.3)),
-            max_tokens=profile.get("max_tokens", base.get("max_tokens", 1024)),
-            timeout=profile.get("timeout", base.get("timeout", 30)),
+            temperature=(options["temperature"] if "temperature" in options
+                         else profile.get("temperature", base.get("temperature", 0.3))),
+            max_tokens=(options["max_tokens"] if "max_tokens" in options
+                        else profile.get("max_tokens", base.get("max_tokens", 1024))),
+            timeout=(options["timeout"] if "timeout" in options
+                     else profile.get("timeout", base.get("timeout", 30))),
         )
 
-    def chat(self, messages, route="general"):
+    def chat(self, messages, route="general", request_options=None):
         settings = self.settings_store.load()
         if not isinstance(settings, Mapping):
             settings = {}
@@ -52,7 +56,9 @@ class ModelRouter:
             try:
                 if self.logger:
                     self.logger.info("多模型路由: route=%s model=default", route)
-                return self._client({}).chat(messages), "default"
+                client = (self._client({}) if request_options is None
+                          else self._client({}, request_options))
+                return client.chat(messages), "default"
             except Exception as exc:
                 if self.logger:
                     self.logger.warning("默认模型调用失败: %s", exc)
@@ -67,7 +73,9 @@ class ModelRouter:
             try:
                 if self.logger:
                     self.logger.info("多模型路由: route=%s model=%s", route, profiles[model_id].get("name", model_id))
-                return self._client(profiles[model_id]).chat(messages), model_id
+                client = (self._client(profiles[model_id]) if request_options is None
+                          else self._client(profiles[model_id], request_options))
+                return client.chat(messages), model_id
             except Exception as exc:
                 last_error = exc
                 if self.logger:

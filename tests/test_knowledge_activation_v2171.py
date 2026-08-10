@@ -41,6 +41,44 @@ class ImaConnectionTruthTests(unittest.TestCase):
         self.assertEqual(results, [])
         self.assertEqual(client._session.post.call_count, 1)
 
+    def test_rate_limit_starts_cooldown_and_skips_followup_requests(self):
+        client = IMAClient("client", "key")
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            "code": 42901,
+            "msg": "\u8bf7\u6c42\u9891\u7387\u8d85\u9650\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+        }
+        client._session.post = Mock(return_value=response)
+
+        self.assertEqual(client.search_knowledge("VPN", "kb-1"), [])
+        self.assertEqual(client.search_knowledge("printer", "kb-2"), [])
+        self.assertEqual(client._session.post.call_count, 1)
+        self.assertGreater(client._rate_limit_remaining(), 0)
+        self.assertIn("\u9650\u6d41\u51b7\u5374", client.last_error)
+
+    def test_multi_kb_search_reuses_short_lived_cache(self):
+        client = IMAClient("client", "key")
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            "code": 0,
+            "msg": "success",
+            "data": {"info_list": [{
+                "title": "VPN recovery",
+                "highlight_content": "Restart the VPN client and reconnect with the updated credential.",
+            }]},
+        }
+        client._session.post = Mock(return_value=response)
+        knowledge_bases = [{"id": "kb-1", "name": "IT"}]
+
+        first = client.search_knowledge_bases("VPN", knowledge_bases)
+        second = client.search_knowledge_bases("  vpn  ", knowledge_bases)
+
+        self.assertEqual(first, second)
+        self.assertEqual(client._session.post.call_count, 1)
+        self.assertTrue(client.last_search_ok)
+
     def test_title_only_result_is_hydrated_from_media_download(self):
         client = IMAClient("client", "key")
         search_response = Mock()

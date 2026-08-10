@@ -3,6 +3,7 @@ IMA OpenAPI 客户端 - 知识库搜索
 文档: https://ima.qq.com/agent-interface
 """
 
+import copy
 import io
 import re
 import requests
@@ -24,6 +25,15 @@ DEFAULT_TIMEOUT = 15
 MAX_MEDIA_BYTES = 20 * 1024 * 1024
 MAX_EXCERPT_CHARS = 12000
 MEDIA_CACHE_TTL_SECONDS = 600
+SEARCH_CACHE_TTL_SECONDS = 120
+RATE_LIMIT_COOLDOWN_SECONDS = 60
+MAX_SEARCH_CACHE_ENTRIES = 128
+RATE_LIMIT_MARKERS = (
+    "\u8bf7\u6c42\u9891\u7387\u8d85\u9650",
+    "\u9891\u7387\u8d85\u9650",
+    "rate limit",
+    "too many requests",
+)
 
 
 class IMAClient:
@@ -41,6 +51,10 @@ class IMAClient:
         self.last_content_error = ""
         self._media_cache = {}
         self._media_cache_lock = threading.RLock()
+        self._search_cache = {}
+        self._search_cache_lock = threading.RLock()
+        self._rate_limit_lock = threading.RLock()
+        self._rate_limited_until = 0.0
         self._session = requests.Session()
         self._session.headers.update({
             "ima-openapi-clientid": self.client_id,
@@ -48,14 +62,43 @@ class IMAClient:
             "Content-Type": "application/json",
         })
 
+    def _rate_limit_remaining(self) -> int:
+        with self._rate_limit_lock:
+            remaining = self._rate_limited_until - time.monotonic()
+        return max(0, int(remaining + 0.999))
+
+    def _activate_rate_limit_cooldown(self) -> None:
+        with self._rate_limit_lock:
+            self._rate_limited_until = max(
+                self._rate_limited_until,
+                time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS,
+            )
+
+    @staticmethod
+    def _is_rate_limit_response(response, data: dict) -> bool:
+        if getattr(response, "status_code", None) == 429:
+            return True
+        message = str(data.get("msg") or data.get("message") or "").casefold()
+        return any(marker in message for marker in RATE_LIMIT_MARKERS)
+
     def _post(self, path: str, body: dict, timeout: int = DEFAULT_TIMEOUT) -> dict:
         """发送 POST 请求到 IMA API"""
+        cooldown = self._rate_limit_remaining()
+        if cooldown:
+            message = f"IMA \u8bf7\u6c42\u6b63\u5728\u9650\u6d41\u51b7\u5374\u4e2d\uff0c\u8bf7 {cooldown} \u79d2\u540e\u91cd\u8bd5"
+            self.last_request_ok = False
+            self.last_error = message
+            logger.info("IMA cooldown active: path=%s remaining=%ss", path, cooldown)
+            return {"code": -2, "msg": message, "cooldown_seconds": cooldown}
+
         url = f"{self.base_url}/{path}"
         start_time = time.time()
         try:
             resp = self._session.post(url, json=body, timeout=timeout)
             data = resp.json()
             success = data.get("code") == 0
+            if not success and self._is_rate_limit_response(resp, data):
+                self._activate_rate_limit_cooldown()
             self.last_code = data.get("code")
             self.last_request_ok = success
             self.last_error = "" if success else str(data.get("msg") or "IMA API 返回错误")
@@ -160,6 +203,26 @@ class IMAClient:
         if not kb_list:
             return []
 
+        normalized_query = " ".join(str(query or "").split()).casefold()
+        cache_key = (
+            normalized_query,
+            tuple(str(kb.get("id") or "").strip() for kb in kb_list),
+        )
+        now = time.monotonic()
+        with self._search_cache_lock:
+            cached = self._search_cache.get(cache_key)
+            if cached and now - cached[0] < SEARCH_CACHE_TTL_SECONDS:
+                results, content_code, content_error = copy.deepcopy(cached[1:])
+                self.last_search_ok = True
+                self.last_request_ok = True
+                self.last_error = ""
+                self.last_content_code = content_code
+                self.last_content_error = content_error
+                logger.info("IMA search cache hit: knowledge_bases=%s", len(kb_list))
+                return results
+            if cached:
+                self._search_cache.pop(cache_key, None)
+
         all_results = []
         for kb in kb_list:
             kb_id = kb.get("id", "")
@@ -185,6 +248,17 @@ class IMAClient:
         self.last_search_ok = search_ok
         self.last_request_ok = search_ok
         self.last_error = search_error
+        if search_ok and not self._rate_limit_remaining():
+            with self._search_cache_lock:
+                if len(self._search_cache) >= MAX_SEARCH_CACHE_ENTRIES:
+                    oldest = min(self._search_cache, key=lambda key: self._search_cache[key][0])
+                    self._search_cache.pop(oldest, None)
+                self._search_cache[cache_key] = (
+                    now,
+                    copy.deepcopy(all_results),
+                    self.last_content_code,
+                    self.last_content_error,
+                )
         return all_results
 
     def search_all_knowledge_bases(self, query: str) -> list:

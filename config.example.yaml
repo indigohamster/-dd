@@ -18,6 +18,17 @@ chat:
   enable_group: true
   keyword_filter: []
 
+# 员工在钉钉使用机器人时的安全控制。限流只影响当前用户，不影响其他员工。
+user_security:
+  enabled: true
+  group_privacy: true
+  redact_sensitive_input: true
+  block_prompt_injection: true
+  rate_limit:
+    enabled: true
+    messages_per_minute: 30
+    ai_requests_per_minute: 10
+
 ticket:
   enabled: true
   database_path: "data/tickets.db"
@@ -61,6 +72,10 @@ ima:
     #   coverage: "适用部门、系统、流程及不覆盖的边界"
     #   example_questions:
     #     - "一个真实但不含敏感数据的示例问题"
+    #   access_scope: "public"  # public / restricted / admin
+    #   allowed_staff_ids: []
+    #   allowed_departments: []
+    #   allowed_roles: []
     #   enabled: true
   expert_triggers:
     - phrase: "召唤运维专家"

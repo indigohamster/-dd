@@ -1488,6 +1488,76 @@ def create_admin_app(config_path=None, settings_path=None, shutdown_callback=Non
     def knowledge_candidates():
         return jsonify(knowledge_store().list_candidates(request.args.get("status") or None))
 
+    @app.get("/api/knowledge/access")
+    def get_knowledge_access():
+        config = read_config()
+        items = []
+        for raw in config.get("ima", {}).get("default_knowledge_bases", []):
+            if not isinstance(raw, dict) or not raw.get("id"):
+                continue
+            items.append({
+                "id": str(raw.get("id")), "name": str(raw.get("name") or raw.get("id")),
+                "access_scope": str(raw.get("access_scope") or "public"),
+                "allowed_staff_ids": raw.get("allowed_staff_ids") or [],
+                "allowed_departments": raw.get("allowed_departments") or [],
+                "allowed_roles": raw.get("allowed_roles") or [],
+            })
+        local = config.get("knowledge_loop", {})
+        items.append({
+            "id": "local-published", "name": "OpsPilot 本地已发布知识",
+            "access_scope": str(local.get("user_access_scope") or "public"),
+            "allowed_staff_ids": local.get("allowed_staff_ids") or [],
+            "allowed_departments": local.get("allowed_departments") or [],
+            "allowed_roles": local.get("allowed_roles") or [],
+        })
+        return jsonify({"items": items})
+
+    @app.put("/api/knowledge/access")
+    def save_knowledge_access():
+        payload = request.get_json(silent=True) or {}
+        items = payload.get("items", []) if isinstance(payload, dict) else []
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            return jsonify({"ok": False, "message": "知识访问配置格式无效"}), 400
+        scopes = {"public", "restricted", "admin"}
+        normalized = {}
+        for item in items:
+            kb_id = str(item.get("id") or "").strip()
+            scope = str(item.get("access_scope") or "public").strip().lower()
+            if not kb_id or kb_id in normalized or scope not in scopes:
+                return jsonify({"ok": False, "message": "知识库 ID 重复或访问范围无效"}), 400
+            entry = {"access_scope": scope}
+            for key in ("allowed_staff_ids", "allowed_departments", "allowed_roles"):
+                values = item.get(key, [])
+                if not isinstance(values, list):
+                    return jsonify({"ok": False, "message": f"{key} 必须是数组"}), 400
+                entry[key] = list(dict.fromkeys(
+                    str(value).strip() for value in values if str(value).strip()
+                ))[:100]
+            normalized[kb_id] = entry
+        config = read_config()
+        current_kbs = config.get("ima", {}).get("default_knowledge_bases", [])
+        known = {str(item.get("id")) for item in current_kbs if isinstance(item, dict)} | {"local-published"}
+        if set(normalized) - known:
+            return jsonify({"ok": False, "message": "访问配置包含未知知识库"}), 400
+        updated_kbs = []
+        for raw in current_kbs:
+            item = dict(raw) if isinstance(raw, dict) else raw
+            if isinstance(item, dict) and str(item.get("id")) in normalized:
+                item.update(normalized[str(item.get("id"))])
+            updated_kbs.append(item)
+        local_access = normalized.get("local-published", {})
+        history.record("knowledge_access", "修改员工知识访问范围")
+        atomic_update_config(config_file, {
+            "ima": {"default_knowledge_bases": updated_kbs},
+            "knowledge_loop": {
+                "user_access_scope": local_access.get("access_scope", "public"),
+                "allowed_staff_ids": local_access.get("allowed_staff_ids", []),
+                "allowed_departments": local_access.get("allowed_departments", []),
+                "allowed_roles": local_access.get("allowed_roles", []),
+            },
+        })
+        return jsonify({"ok": True, "message": "知识访问范围已保存；机器人重启后生效"})
+
     @app.get("/api/knowledge/candidates/<candidate_id>")
     def knowledge_candidate(candidate_id):
         candidate = knowledge_store().get_candidate(candidate_id)

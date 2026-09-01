@@ -220,6 +220,24 @@ class AdminUiTests(unittest.TestCase):
         rejected = self.client.put("/api/models", json={"models": [invalid_url], "routing": {}})
         self.assertEqual(rejected.status_code, 400)
 
+    def test_knowledge_access_endpoint_persists_local_scope_and_rejects_unknown_ids(self):
+        current = self.client.get("/api/knowledge/access").get_json()
+        self.assertTrue(any(item["id"] == "local-published" for item in current["items"]))
+        response = self.client.put("/api/knowledge/access", json={"items": [{
+            "id": "local-published", "access_scope": "restricted",
+            "allowed_staff_ids": ["staff-1"], "allowed_departments": ["运维部"],
+            "allowed_roles": ["运维人员"],
+        }]})
+        self.assertEqual(response.status_code, 200)
+        with open(self.config_path, encoding="utf-8") as handle:
+            config = yaml.safe_load(handle)
+        self.assertEqual(config["knowledge_loop"]["user_access_scope"], "restricted")
+        self.assertEqual(config["knowledge_loop"]["allowed_staff_ids"], ["staff-1"])
+        unknown = self.client.put("/api/knowledge/access", json={"items": [{
+            "id": "unknown", "access_scope": "public",
+        }]})
+        self.assertEqual(unknown.status_code, 400)
+
     def test_ticket_workbench_lists_and_updates_ticket(self):
         manager = TicketManager(os.path.join(self.tmp.name, "tickets.db"), backup_enabled=False)
         ticket = manager.create_ticket("c", "IT", "u", "用户", "打印机无法打印")

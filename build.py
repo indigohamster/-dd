@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""OpsPilot 企业运维助手 V2.17.5 的安全 EXE 打包脚本。"""
+"""OpsPilot 企业运维助手 V2.17.6 的安全 EXE 打包脚本。"""
 
 import os
 import hashlib
@@ -15,7 +15,7 @@ import yaml
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(PROJECT_DIR, "dist")
 BUILD_DIR = os.path.join(PROJECT_DIR, "build")
-EXE_NAME = "dingtalk-ops-v2.17.5"
+EXE_NAME = "dingtalk-ops-v2.17.6"
 CONFIG_TEMPLATE = os.path.join(PROJECT_DIR, "config.example.yaml")
 PACKAGE_DIR = os.path.join(DIST_DIR, EXE_NAME + "-package")
 PACKAGE_README = "首次使用说明.txt"
@@ -89,9 +89,9 @@ def write_first_run_readme(package_dir=PACKAGE_DIR):
     path = os.path.join(package_dir, PACKAGE_README)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(
-            "OpsPilot V2.17.5 首次使用\n"
+            "OpsPilot V2.17.6 首次使用\n"
             "==========================\n\n"
-            "1. 双击 dingtalk-ops-v2.17.5.exe。\n"
+            "1. 双击 dingtalk-ops-v2.17.6.exe。\n"
             "2. 浏览器会打开 http://127.0.0.1:8765。\n"
             "3. 按向导填写钉钉凭证和可选 AI 配置。\n"
             "4. 完成体检后机器人会自动开始连接。\n\n"
@@ -187,7 +187,7 @@ def assert_safe_package(package_dir=PACKAGE_DIR):
 
 def main():
     print("=" * 50)
-    print("  OpsPilot 企业运维助手 V2.17.5 安全打包")
+    print("  OpsPilot 企业运维助手 V2.17.6 安全打包")
     print("=" * 50)
 
     print("\n[1/4] 检查打包依赖...")

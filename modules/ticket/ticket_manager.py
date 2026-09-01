@@ -649,6 +649,31 @@ class TicketManager:
             finally:
                 conn.close()
 
+    def list_tickets_by_identity(self, user_id: str, staff_id: str = "",
+                                 status: str = None, limit: int = 20) -> list:
+        """Query tickets owned by either current sender ID or stable DingTalk staff ID."""
+        user_id = str(user_id or "").strip()
+        staff_id = str(staff_id or "").strip()
+        if not staff_id:
+            return self.list_tickets_by_user(user_id, status=status, limit=limit)
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.row_factory = sqlite3.Row
+                clauses = ["(creator_id=? OR creator_staff_id=?)"]
+                params = [user_id, staff_id]
+                if status:
+                    clauses.append("status=?")
+                    params.append(status)
+                params.append(max(1, int(limit)))
+                rows = conn.execute(
+                    f"SELECT * FROM tickets WHERE {' AND '.join(clauses)} "
+                    "ORDER BY created_at DESC LIMIT ?", params,
+                ).fetchall()
+                return [self._ticket_dict(row) for row in rows]
+            finally:
+                conn.close()
+
     def list_tickets_by_status(self, status: str = None, limit: int = 50) -> list:
         """按状态查询工单列表（管理员用）"""
         with self._lock:
@@ -1414,7 +1439,7 @@ class TicketManager:
                 conn.close()
 
     def confirm_resolution(self, ticket_id, user_id, operator_nick="", score=None,
-                           comment="") -> Optional[dict]:
+                           comment="", staff_id="") -> Optional[dict]:
         """由创建人确认解决并关闭工单，同时原子写入满意度与审计日志。"""
         normalized_score = None
         if score not in (None, ""):
@@ -1425,6 +1450,7 @@ class TicketManager:
             if normalized_score < 1 or normalized_score > 5:
                 return None
         user_id = str(user_id or "").strip()
+        staff_id = str(staff_id or "").strip()
         comment = str(comment or "").strip()
         now = datetime.now().strftime(self._DATETIME_FORMAT)
         with self._lock:
@@ -1434,7 +1460,10 @@ class TicketManager:
                 current = conn.execute(
                     "SELECT * FROM tickets WHERE ticket_id=?", (ticket_id,)
                 ).fetchone()
-                if not current or current["creator_id"] != user_id:
+                if not current or not (
+                    current["creator_id"] == user_id
+                    or (staff_id and str(current["creator_staff_id"] or "") == staff_id)
+                ):
                     return None
                 if current["status"] == STATUS_CLOSED and current["user_confirmation"] == "confirmed":
                     return self._ticket_dict(current)
@@ -1510,9 +1539,10 @@ class TicketManager:
         return self.resolve_ticket(ticket_id, resolution, operator_id, operator_nick)
 
     def withdraw_ticket(self, ticket_id: str, user_id: str, user_nick: str,
-                        detail: str = "") -> Optional[dict]:
+                        detail: str = "", staff_id: str = "") -> Optional[dict]:
         """由创建者撤回尚未解决的工单；关闭但不计入已解决指标。"""
         reason = str(detail or "").strip()
+        staff_id = str(staff_id or "").strip()
         if not reason:
             return None
         now = datetime.now().strftime(self._DATETIME_FORMAT)
@@ -1520,10 +1550,13 @@ class TicketManager:
             conn = self._connect()
             try:
                 current = conn.execute(
-                    "SELECT creator_id,status FROM tickets WHERE ticket_id=?", (ticket_id,),
+                    "SELECT creator_id,creator_staff_id,status FROM tickets WHERE ticket_id=?", (ticket_id,),
                 ).fetchone()
-                if (not current or str(current[0]) != str(user_id) or
-                        current[1] not in (STATUS_OPEN, STATUS_ASSIGNED, STATUS_IN_PROGRESS)):
+                owned = current and (
+                    str(current[0]) == str(user_id)
+                    or (staff_id and str(current[1] or "") == staff_id)
+                )
+                if (not owned or current[2] not in (STATUS_OPEN, STATUS_ASSIGNED, STATUS_IN_PROGRESS)):
                     return None
                 conn.execute(
                     "UPDATE tickets SET status=?, updated_at=?, resolved_at=NULL, "

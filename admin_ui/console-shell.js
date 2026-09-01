@@ -182,7 +182,7 @@
     overview:loadHomePage,
     tickets:async()=>{await ensureSettings();await loadTickets()},
     issues:()=>loadIssues(),
-    knowledge:()=>loadKnowledge(),
+    knowledge:async()=>{await Promise.all([loadKnowledge(),loadKnowledgeAccess()])},
     files:()=>loadSpreadsheetSettings(),
     settings:async()=>{await Promise.all([loadModules(),loadKnowledgeExportDirectory()])},
     dashboard:()=>loadDashboard(),

@@ -11,6 +11,8 @@ import sys
 import threading
 from typing import Optional
 
+from utils.user_security import redact_sensitive_text
+
 
 _DEFAULT_FORMAT = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
 _DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -61,7 +63,7 @@ def _redact_sensitive_data(value: object) -> str:
         text,
     )
     text = _BEARER_RE.sub(r"\1\2***", text)
-    return _SK_KEY_RE.sub("***", text)
+    return redact_sensitive_text(_SK_KEY_RE.sub("***", text))
 
 
 class _RedactingFormatter(logging.Formatter):

@@ -137,7 +137,7 @@ class WaitressAdminServerTests(unittest.TestCase):
                         time.sleep(0.02)
                 self.assertIsNotNone(response)
                 self.assertEqual(200, response.status_code)
-                self.assertIn("OpsPilot/V2.17.5", response.headers.get("Server", ""))
+                self.assertIn("OpsPilot/V2.17.6", response.headers.get("Server", ""))
                 with ThreadPoolExecutor(max_workers=12) as executor:
                     statuses = list(executor.map(
                         lambda _: requests.get(url, timeout=3).status_code,

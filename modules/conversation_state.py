@@ -24,7 +24,7 @@ class ConversationStateStore:
     @staticmethod
     def user_key(info):
         conv_id = str(info.get("conv_id") or "")
-        sender_id = str(info.get("sender_id") or info.get("staff_id") or "")
+        sender_id = str(info.get("staff_id") or info.get("sender_id") or "")
         return f"{conv_id}\x1f{sender_id}" if sender_id else conv_id
 
     def set_feedback(self, key, value):

@@ -15,6 +15,8 @@ import logging
 from datetime import datetime, date
 from typing import Optional
 
+from utils.user_security import pseudonymous_actor_id, redact_sensitive_text
+
 logger = logging.getLogger("message-logger")
 
 
@@ -50,7 +52,12 @@ class MessageLogger:
             answer_len: int   — AI回答长度
             answer_preview: str — AI回答摘要 (前100字)
         """
+        entry = dict(entry or {})
         entry["date"] = date.today().isoformat()
+        entry["sender_id"] = pseudonymous_actor_id(entry.get("sender_id"))
+        for key in ("content", "answer_preview", "conv_title"):
+            if key in entry:
+                entry[key] = redact_sensitive_text(entry.get(key, ""))
         line = json.dumps(entry, ensure_ascii=False) + "\n"
 
         log_file = self._log_file()

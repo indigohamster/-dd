@@ -92,6 +92,37 @@ class LocalAIV216Tests(unittest.TestCase):
                     router.chat([{"role": "user", "content": "image"}], "vision")
             create_client.assert_not_called()
 
+    def test_model_router_uses_ordered_multiple_api_fallbacks_without_duplicates(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = AdminSettingsStore(Path(temp_dir) / "settings.json")
+            settings = store.load()
+            settings["models"] = [
+                {"id": model_id, "name": model_id, "enabled": True, "provider": "local",
+                 "base_url": f"http://127.0.0.1/{model_id}", "model": model_id}
+                for model_id in ("primary", "backup-1", "backup-2")
+            ]
+            settings["model_routing"] = {
+                "general": "primary", "fallback": "backup-1",
+                "fallback_order": ["backup-1", "primary", "backup-2"],
+            }
+            store.save(settings)
+            router = ModelRouter({}, settings_store=store)
+            attempted = []
+
+            def create_client(profile, request_options=None):
+                attempted.append(profile["id"])
+                client = Mock()
+                if profile["id"] == "backup-2":
+                    client.chat.return_value = "备用成功"
+                else:
+                    client.chat.side_effect = RuntimeError("暂时不可用")
+                return client
+
+            with patch.object(router, "_client", side_effect=create_client):
+                answer, model_id = router.chat([{"role": "user", "content": "测试"}], "general")
+            self.assertEqual((answer, model_id), ("备用成功", "backup-2"))
+            self.assertEqual(attempted, ["primary", "backup-1", "backup-2"])
+
     def test_disabled_voice_module_stops_before_download(self):
         handler = object.__new__(BotMessageHandler)
         handler.voice_enabled = False

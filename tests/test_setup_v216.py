@@ -153,6 +153,9 @@ class SetupV216Tests(unittest.TestCase):
         settings["model_routing"]["vision"] = "profile-vision"
         self.settings.save(settings)
         self.assertTrue(registry.is_configured("vision"))
+        settings["model_routing"] = {"vision": "", "fallback": "", "fallback_order": ["profile-vision"]}
+        self.settings.save(settings)
+        self.assertTrue(registry.is_configured("vision"))
 
     def test_setup_can_complete_with_default_ai_as_vision_route(self):
         service = SetupService(self.config_path, self.settings)

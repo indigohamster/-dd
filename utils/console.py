@@ -23,7 +23,7 @@ if sys.platform == "win32":
 
 
 # ── 机器人版本 ──
-BOT_VERSION = "V2.17.4"
+BOT_VERSION = "V2.17.5"
 
 
 # ── 全局运行状态 ──

@@ -62,7 +62,10 @@ class AdminSettingsStore:
                 {"code": "BUSINESS", "name": "业务系统报修", "request_type": "incident", "category": "业务系统问题", "description": "ERP、CRM 及其他业务系统异常", "keywords": "ERP,CRM,业务系统", "priority": "high", "assignment_group": "应用运维", "approval_required": False, "instructions": "请提供系统、功能菜单、完整报错、发生时间和影响范围。", "response_hours": 2, "resolution_hours": 8, "enabled": True},
             ],
             "models": [],
-            "model_routing": {"general": "", "ticket": "", "vision": "", "fallback": ""},
+            "model_routing": {
+                "general": "", "ticket": "", "vision": "", "fallback": "",
+                "fallback_order": [],
+            },
             "response_style": {
                 "assistant_name": "企业运维助手", "tone": "专业、简洁、耐心", "length": "适中",
                 "use_emoji": False, "cite_sources": True,

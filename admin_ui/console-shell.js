@@ -4,7 +4,7 @@
   const PRIMARY_VIEWS=new Set(['overview','tickets','knowledge','files','settings']);
   const VIEW_PARENTS={issues:'tickets',dashboard:'overview',monitor:'settings',network:'settings',tasks:'files','service-catalog':'settings','aitable-sync':'settings',api:'settings',models:'settings',connectors:'settings',people:'settings',response:'settings',history:'settings'};
   const VIEW_MODULES={tickets:['tickets'],issues:['tickets'],knowledge:['knowledge'],files:['spreadsheet'],dashboard:['tickets'],tasks:['spreadsheet'],'service-catalog':['tickets'],'aitable-sync':['aitable']};
-  const VIEW_TITLES={overview:'首页',tickets:'工单',issues:'Issue 记录',knowledge:'知识',files:'文件与任务',settings:'设置',dashboard:'每日驾驶舱',monitor:'运行监控',network:'网络诊断',tasks:'后台任务','service-catalog':'服务目录','aitable-sync':'钉钉智能表格',api:'AI 服务',models:'多模型路由',connectors:'连接器',people:'人员与职责',response:'回答方式',history:'配置历史'};
+  const VIEW_TITLES={overview:'首页',tickets:'工单',issues:'Issue 记录',knowledge:'知识',files:'文件与任务',settings:'设置',dashboard:'每日驾驶舱',monitor:'运行监控',network:'网络诊断',tasks:'后台任务','service-catalog':'服务目录','aitable-sync':'钉钉智能表格',api:'AI 服务',models:'多个 AI API',connectors:'连接器',people:'人员与职责',response:'回答方式',history:'配置历史'};
   const FALLBACK_MODULES=[
     {id:'tickets',name:'工单中心',description:'受理、分派、SLA 与状态通知',enabled:true},
     {id:'knowledge',name:'知识闭环',description:'从解决记录生成、审核和发布知识',enabled:true},

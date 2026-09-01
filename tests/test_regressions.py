@@ -192,6 +192,34 @@ class AdminUiTests(unittest.TestCase):
         self.assertNotIn("connector-secret", self.client.get("/api/settings").get_data(as_text=True))
         self.assertNotIn("model-secret", self.client.get("/api/models").get_data(as_text=True))
 
+    def test_multiple_ai_api_routing_is_validated_and_persisted(self):
+        models = [
+            {"id": "m1", "name": "主 API", "provider": "deepseek", "model": "deepseek-chat",
+             "base_url": "https://api.deepseek.com", "api_key": "key-1", "enabled": True},
+            {"id": "m2", "name": "备用 API", "provider": "ollama", "model": "local-model",
+             "base_url": "http://127.0.0.1:11434", "enabled": True},
+        ]
+        routing = {"general": "m1", "ticket": "", "vision": "", "fallback": "m2",
+                   "fallback_order": ["m2", "m1", "m2"]}
+        response = self.client.put("/api/models", json={"models": models, "routing": routing})
+        self.assertEqual(response.status_code, 200)
+        saved = self.client.get("/api/models").get_json()
+        self.assertEqual(saved["routing"]["fallback_order"], ["m2", "m1"])
+        self.assertNotIn("key-1", str(saved))
+
+        invalid = self.client.put("/api/models", json={"models": models, "routing": {"general": "missing"}})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn("不存在", invalid.get_json()["message"])
+
+    def test_multiple_ai_api_rejects_duplicate_ids_and_invalid_urls(self):
+        base = {"id": "same", "name": "API", "provider": "custom", "model": "model",
+                "base_url": "https://example.invalid", "enabled": True}
+        duplicate = self.client.put("/api/models", json={"models": [base, dict(base)], "routing": {}})
+        self.assertEqual(duplicate.status_code, 400)
+        invalid_url = dict(base, id="different", base_url="file:///etc/passwd")
+        rejected = self.client.put("/api/models", json={"models": [invalid_url], "routing": {}})
+        self.assertEqual(rejected.status_code, 400)
+
     def test_ticket_workbench_lists_and_updates_ticket(self):
         manager = TicketManager(os.path.join(self.tmp.name, "tickets.db"), backup_enabled=False)
         ticket = manager.create_ticket("c", "IT", "u", "用户", "打印机无法打印")

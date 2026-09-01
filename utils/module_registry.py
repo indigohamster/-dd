@@ -95,8 +95,11 @@ class ModuleRegistry:
             routing = settings.get("model_routing", {})
             if not isinstance(routing, Mapping):
                 routing = {}
+            fallback_order = routing.get("fallback_order", [])
+            if not isinstance(fallback_order, list):
+                fallback_order = []
             route_ids = []
-            for route_id in (routing.get("vision"), routing.get("fallback")):
+            for route_id in (routing.get("vision"), routing.get("fallback"), *fallback_order):
                 route_id = str(route_id or "")
                 if route_id and route_id not in route_ids:
                     route_ids.append(route_id)

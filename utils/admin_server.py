@@ -963,6 +963,48 @@ def create_admin_app(config_path=None, settings_path=None, shutdown_callback=Non
             or not isinstance(payload.get("routing", {}), dict)
         ):
             return jsonify({"ok": False, "message": "模型和路由配置格式无效"}), 400
+        models = payload.get("models", [])
+        routing = payload.get("routing", {})
+        if len(models) > 20:
+            return jsonify({"ok": False, "message": "最多可配置 20 个 AI API"}), 400
+        known_ids = set()
+        allowed_providers = {"deepseek", "openai", "openai_compatible", "ollama", "local", "custom"}
+        for index, profile in enumerate(models, start=1):
+            model_id = str(profile.get("id") or "").strip()
+            model = str(profile.get("model") or "").strip()
+            base_url = str(profile.get("base_url") or "").strip()
+            provider = str(profile.get("provider") or "custom").strip().lower()
+            parsed = urlparse(base_url)
+            if not model_id or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", model_id):
+                return jsonify({"ok": False, "message": f"第 {index} 个 API 的配置 ID 无效"}), 400
+            if model_id in known_ids:
+                return jsonify({"ok": False, "message": "API 配置 ID 不能重复"}), 400
+            if not model or not base_url:
+                return jsonify({"ok": False, "message": f"第 {index} 个 API 必须填写模型和 Base URL"}), 400
+            if provider not in allowed_providers:
+                return jsonify({"ok": False, "message": f"第 {index} 个 API 服务类型无效"}), 400
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+                return jsonify({"ok": False, "message": f"第 {index} 个 API 的 Base URL 无效"}), 400
+            known_ids.add(model_id)
+        for route_name in ("general", "ticket", "vision", "fallback"):
+            selected = str(routing.get(route_name) or "").strip()
+            if selected and selected not in known_ids:
+                return jsonify({"ok": False, "message": f"路由 {route_name} 引用了不存在的 API"}), 400
+        fallback_order = routing.get("fallback_order", [])
+        if not isinstance(fallback_order, list):
+            return jsonify({"ok": False, "message": "备用 API 顺序必须是数组"}), 400
+        normalized_fallbacks = []
+        for model_id in fallback_order:
+            model_id = str(model_id or "").strip()
+            if model_id not in known_ids:
+                return jsonify({"ok": False, "message": "备用顺序引用了不存在的 API"}), 400
+            if model_id not in normalized_fallbacks:
+                normalized_fallbacks.append(model_id)
+        routing = {
+            route_name: str(routing.get(route_name) or "").strip()
+            for route_name in ("general", "ticket", "vision", "fallback")
+        }
+        routing["fallback_order"] = normalized_fallbacks
         base_llm = read_config().get("llm", {})
         history.record("models", "修改多模型与主备路由")
 
@@ -986,10 +1028,10 @@ def create_admin_app(config_path=None, settings_path=None, shutdown_callback=Non
                         item.pop("api_key", None)
                 merged.append(item)
             data["models"] = merged
-            data["model_routing"] = payload.get("routing", data.get("model_routing", {}))
+            data["model_routing"] = routing
 
         store.mutate(update)
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "message": "多个 AI API 与自动切换顺序已保存，即时生效"})
 
     @app.post("/api/models/test")
     def test_model():

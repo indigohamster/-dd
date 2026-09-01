@@ -42,7 +42,10 @@ class ModelRouter:
             routing = {}
         requested = []
         order = []
-        for model_id in (routing.get(route), routing.get("fallback")):
+        fallback_order = routing.get("fallback_order", [])
+        if not isinstance(fallback_order, list):
+            fallback_order = []
+        for model_id in (routing.get(route), routing.get("fallback"), *fallback_order):
             if model_id and model_id not in requested:
                 requested.append(model_id)
                 if model_id in profiles:

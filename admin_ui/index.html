@@ -186,7 +186,7 @@
       </div>
     </section>
 
-    <section class="view" id="models"><div class="section-intro"><div><p>MODEL ROUTING</p><h2>多模型与备用路由</h2><span>为不同任务选择首选模型，并在失败时自动切换备用模型。</span></div><button class="primary" onclick="addModel()">添加模型</button></div><div class="form-panel"><div class="form-grid"><label>普通问答<select id="route-general"></select></label><label>工单分析<select id="route-ticket"></select></label><label>图片理解<select id="route-vision"></select></label><label>全局备用模型<select id="route-fallback"></select></label></div><button class="primary" onclick="saveModels()">保存路由</button></div><div id="model-list" class="card-list top-gap"></div></section>
+    <section class="view" id="models"><div class="section-intro"><div><p>MULTI API</p><h2>多个 AI API</h2><span>每个 API 独立保存地址、模型和密钥。按任务选择主 API，失败时按备用顺序自动切换，不会同时重复调用。</span></div><button class="primary" onclick="addModel()">添加 API</button></div><div class="form-panel"><h3>用途与自动切换</h3><div class="form-grid"><label>普通问答<select id="route-general"></select></label><label>工单分析<select id="route-ticket"></select></label><label>图片理解<select id="route-vision"></select></label><label>第一备用 API<select id="route-fallback"></select></label></div><div class="top-gap"><b>后续备用顺序</b><small class="field-help">勾选后按列表从上到下尝试；已选择的主 API 和第一备用不会重复调用。</small><div id="fallback-order-list" class="card-list top-gap"></div></div><button class="primary top-gap" onclick="saveModels()">保存用途与顺序</button></div><div id="model-list" class="card-list top-gap"></div></section>
 
     <section class="view" id="connectors"><div class="section-intro"><div><p>INTEGRATIONS</p><h2>连接器</h2><span>统一管理钉钉、知识库和企业 HTTP 服务。</span></div><button class="primary" onclick="addConnector()">添加连接器</button></div><div id="connector-list" class="card-list"></div></section>
     <section class="view" id="files">
@@ -225,6 +225,7 @@
       <div class="settings-heading"><div><h3>常用配置</h3><p>日常交接通常只需要处理这些项目。</p></div></div>
       <div class="settings-grid">
         <button class="settings-card" onclick="openConsoleView('api','AI 服务','settings')"><span class="settings-icon">AI</span><div><b>AI 服务</b><small>选择云端或本地模型</small></div><i>›</i></button>
+        <button class="settings-card" onclick="openConsoleView('models','多个 AI API','settings')"><span class="settings-icon">多</span><div><b>多个 AI API</b><small>新增 API、分配用途和自动备用</small></div><i>›</i></button>
         <button class="settings-card" onclick="openConsoleView('people','人员与职责','settings')"><span class="settings-icon">人</span><div><b>人员与职责</b><small>管理员、负责人和擅长领域</small></div><i>›</i></button>
         <button class="settings-card" onclick="openConsoleView('response','回答方式','settings')"><span class="settings-icon">答</span><div><b>回答方式</b><small>语气、长度和转人工规则</small></div><i>›</i></button>
         <button class="settings-card" data-module-any="tickets" onclick="openConsoleView('service-catalog','服务目录','settings')"><span class="settings-icon">服</span><div><b>服务目录</b><small>自动分类、派单和 SLA</small></div><i>›</i></button>
@@ -240,12 +241,6 @@
         <button class="settings-card" onclick="openConsoleView('history','配置历史','settings')"><span class="settings-icon">史</span><div><b>配置历史</b><small>查询和恢复历史版本</small></div><i>›</i></button>
       </div>
 
-      <div class="advanced-only">
-        <div class="settings-heading"><div><h3>高级能力</h3><p>面向模型路由和深度定制，建议由技术人员维护。</p></div></div>
-        <div class="settings-grid">
-          <button class="settings-card" onclick="openConsoleView('models','多模型路由','settings')"><span class="settings-icon">模</span><div><b>多模型与备用路由</b><small>按任务分配模型与故障切换</small></div><i>›</i></button>
-        </div>
-      </div>
     </section>
 
     <section class="view" id="history"><div class="section-intro"><div><p>CHANGE CONTROL</p><h2>配置版本历史</h2><span>每次保存前自动创建快照，可恢复 API、连接器、人员和回答策略。</span></div><button class="ghost" onclick="loadHistory()">刷新</button></div><div class="panel table-wrap"><table><thead><tr><th>时间</th><th>配置区域</th><th>说明</th><th>操作</th></tr></thead><tbody id="history-list"></tbody></table></div></section>

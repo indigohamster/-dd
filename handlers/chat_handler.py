@@ -55,6 +55,7 @@ from utils.task_queue import PersistentTaskQueue
 from utils.ticket_notifier import TicketStatusNotifier
 from utils.observability import ObservabilityStore
 from utils.admin_settings import AdminSettingsStore
+from utils.file_connector import SMBReadOnlyConnector
 from utils.aitable_ticket_sync import TicketAITableSync
 from utils.network_diagnostics import NetworkDiagnostics
 from utils.user_security import (
@@ -536,12 +537,31 @@ class BotMessageHandler(ChatbotHandler):
         else:
             expert_section = ""
 
+        nas_section = ""
+        try:
+            actor = self._security_actor_context(info)
+            connectors = self.admin_settings_store.load().get("connectors", [])
+            if any(
+                isinstance(item, dict)
+                and str(item.get("type") or "").lower() == "smb"
+                and item.get("enabled", True) is not False
+                and UserSecurityPolicy.knowledge_allowed(item, actor)
+                for item in connectors
+            ):
+                nas_section = (
+                    "\n\n### 📁 查询公共文件夹\n"
+                    "- 单聊发送「**查 NAS 报价模板**」查询已授权的公共文件夹"
+                )
+        except Exception as exc:
+            self.logger.warning("读取 NAS 连接器能力失败: %s", type(exc).__name__)
+
         title = "🦊 你好！我是企业 IT 运维助手"
         md_text = (
             f"### 欢迎使用 IT 运维智能助手 🦊\n\n"
             f"你可以直接问我 IT 相关问题，我会搜索知识库为你解答。\n\n"
             f"### 📚 也可以直接搜索知识库\n"
             f"- 发送「搜 xxx」「查 xxx」「找 xxx」查看知识库原始搜索结果"
+            f"{nas_section}"
             f"\n\n### 🧭 IT 服务台\n"
             f"- 发送「**帮助**」查看全部能力\n"
             f"- 发送「**服务目录**」申请账号、权限、设备等标准服务\n"
@@ -2822,6 +2842,102 @@ class BotMessageHandler(ChatbotHandler):
             self.reply_text("⚠️ 语音消息下载失败，请用文字描述你的问题", msg)
             return AckMessage.STATUS_OK, "OK"
 
+    @staticmethod
+    def _extract_file_connector_query(content: str) -> tuple[bool, str]:
+        """Recognize explicit NAS/file-server searches without intercepting generic questions."""
+        text = str(content or "").strip()
+        domain = r"(?:NAS|公共文件夹|共享文件夹|文件服务器)"
+        verb = r"(?:查找|查询|搜索|查|找)"
+        patterns = (
+            rf"^(?:请|麻烦)?(?:帮我)?(?:在)?{domain}(?:里面|中的|里的|里|中)?\s*{verb}(?:一下)?\s*(.*)$",
+            rf"^(?:请|麻烦)?(?:帮我)?{verb}(?:一下)?\s*{domain}(?:里面|中的|里的|里|中)?\s*(.*)$",
+        )
+        for pattern in patterns:
+            matched = re.match(pattern, text, re.I)
+            if matched:
+                return True, matched.group(1).strip(" ：:，,。")
+        return False, ""
+
+    @staticmethod
+    def _format_file_size(value: object) -> str:
+        try:
+            size = max(0, int(value))
+        except (TypeError, ValueError):
+            return ""
+        if size < 1024:
+            return f"{size} B"
+        if size < 1024 * 1024:
+            return f"{size / 1024:.1f} KB"
+        return f"{size / 1024 / 1024:.1f} MB"
+
+    def _handle_file_connector_query(self, msg: ChatbotMessage, info: dict, query: str) -> tuple:
+        if not query:
+            self.reply_text("请告诉我要查询的文件名或关键词，例如：查 NAS 报价模板", msg)
+            return AckMessage.STATUS_OK, "OK"
+        settings = self.admin_settings_store.load()
+        configured = [
+            item for item in settings.get("connectors", [])
+            if isinstance(item, dict) and str(item.get("type") or "").lower() == "smb"
+            and item.get("enabled", True) is not False
+        ]
+        if not configured:
+            self.reply_text("当前还没有配置可用的 NAS 公共文件夹，请联系管理员在后台“连接器”中添加。", msg)
+            return AckMessage.STATUS_OK, "OK"
+        actor = self._security_actor_context(info)
+        connectors = [item for item in configured if UserSecurityPolicy.knowledge_allowed(item, actor)]
+        if not connectors:
+            self.reply_text("🔒 当前账号没有查询这些公共文件夹的权限，请联系管理员。", msg)
+            return AckMessage.STATUS_OK, "OK"
+
+        groups, failures, total = [], 0, 0
+        actor_id = pseudonymous_actor_id(self.user_security.actor_key(info))
+        for connector in connectors[:5]:
+            connector_id = str(connector.get("id") or "smb")[:80]
+            try:
+                result = SMBReadOnlyConnector.search(connector, query, timeout=10)
+                items = result.get("results", [])
+                self.observability.record_event(
+                    "connector", f"smb_search:{connector_id}", "success",
+                    duration_ms=result.get("duration_ms", 0), actor_id=actor_id,
+                    detail=f"results={len(items)}",
+                )
+                if not items:
+                    continue
+                lines = [f"#### {str(connector.get('name') or '公共文件夹')[:80]}"]
+                for item in items[: max(0, 15 - total)]:
+                    name = str(item.get("name") or "未命名").replace("`", "'")
+                    path = str(item.get("path") or "").replace("`", "'")
+                    icon = "📁" if item.get("type") == "directory" else "📄"
+                    meta = ""
+                    if item.get("type") == "file":
+                        meta = self._format_file_size(item.get("size"))
+                    if item.get("modified_at"):
+                        meta = " · ".join(part for part in (meta, str(item["modified_at"])) if part)
+                    lines.append(f"- {icon} **{name}**{f'（{meta}）' if meta else ''}\n  `{path}`")
+                    total += 1
+                    if total >= 15:
+                        break
+                groups.append("\n".join(lines))
+                if total >= 15:
+                    break
+            except Exception as exc:
+                failures += 1
+                self.logger.warning("NAS 只读查询失败: connector=%s error=%s", connector_id, type(exc).__name__)
+                self.observability.record_event(
+                    "connector", f"smb_search:{connector_id}", "error",
+                    actor_id=actor_id, detail=type(exc).__name__,
+                )
+        if groups:
+            footer = "\n\n> 仅查询文件名、路径和基础信息；OpsPilot 不会修改 NAS 文件。"
+            if total >= 15:
+                footer += " 结果较多，当前只显示前 15 项，请换用更具体的关键词。"
+            self.reply_markdown("NAS 查询结果", "\n\n".join(groups) + footer, msg)
+        elif failures:
+            self.reply_text("⚠️ NAS 暂时无法查询，请稍后重试或联系管理员检查连接。", msg)
+        else:
+            self.reply_text(f"没有找到与“{query[:60]}”匹配的文件或目录。", msg)
+        return AckMessage.STATUS_OK, "OK"
+
     def _dispatch_text_message(self, msg: ChatbotMessage, info: dict) -> tuple:
         """
         完整文本消息调度逻辑（从 process 中提取）。
@@ -2877,6 +2993,11 @@ class BotMessageHandler(ChatbotHandler):
                 lines = [f"- {t['task_id']}｜{labels.get(t['status'], t['status'])}｜{t['progress']}%｜{t['title']}" for t in tasks]
                 self.reply_text("📋 最近任务\n" + "\n".join(lines), msg)
             return AckMessage.STATUS_OK, "OK"
+
+        # 显式 NAS/公共文件夹命令属于确定性只读查询，不进入 AI、工单或排障状态机。
+        file_query_matched, file_query = self._extract_file_connector_query(content)
+        if file_query_matched:
+            return self._handle_file_connector_query(msg, info, file_query)
 
         # 已上传表格后的自然语言处理指令优先执行。
         pending_sheet = self.conversation_states.get_spreadsheet(session_key)

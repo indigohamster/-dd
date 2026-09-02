@@ -220,7 +220,7 @@ def _item_id(item: Mapping[str, Any]) -> str:
 
 
 def _same_connector_identity(current: Mapping[str, Any], candidate: Mapping[str, Any]) -> bool:
-    return (
+    same = (
         bool(_item_id(current))
         and _item_id(current) == _item_id(candidate)
         and str(current.get("type") or "").strip().lower()
@@ -228,6 +228,14 @@ def _same_connector_identity(current: Mapping[str, Any], candidate: Mapping[str,
         and normalize_endpoint(_sanitize_url(str(current.get("url") or "")))
         == normalize_endpoint(_sanitize_url(str(candidate.get("url") or "")))
     )
+    if same and str(candidate.get("type") or "").strip().lower() == "smb":
+        same = (
+            str(current.get("username") or "").strip().casefold()
+            == str(candidate.get("username") or "").strip().casefold()
+            and str(current.get("domain") or "").strip().casefold()
+            == str(candidate.get("domain") or "").strip().casefold()
+        )
+    return same
 
 
 def _same_model_identity(current: Mapping[str, Any], candidate: Mapping[str, Any]) -> bool:

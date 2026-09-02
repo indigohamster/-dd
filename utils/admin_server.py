@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import uuid
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
@@ -24,6 +25,7 @@ from utils.console import BOT_VERSION, _mask_secret, bot_status
 from utils.admin_settings import AdminSettingsStore
 from utils.config_history import ConfigHistory
 from utils.connector_executor import HTTPConnectorExecutor
+from utils.file_connector import SMBReadOnlyConnector
 from modules.ticket import TicketManager
 from modules.knowledge_loop import KnowledgeLoopStore
 from modules.issue import IssueService
@@ -889,6 +891,13 @@ def create_admin_app(config_path=None, settings_path=None, shutdown_callback=Non
                         and normalize_endpoint(public_sanitized_copy(str(old.get("url") or ""), "url"))
                         == normalize_endpoint(public_sanitized_copy(str(item.get("url") or ""), "url"))
                     )
+                    if same_target and str(item.get("type") or "").strip().lower() == "smb":
+                        same_target = (
+                            str(old.get("username") or "").strip().casefold()
+                            == str(item.get("username") or "").strip().casefold()
+                            and str(old.get("domain") or "").strip().casefold()
+                            == str(item.get("domain") or "").strip().casefold()
+                        )
                     if not item.get("auth_value") and same_target:
                         item["auth_value"] = old.get("auth_value", "")
                     elif not item.get("auth_value"):
@@ -900,12 +909,26 @@ def create_admin_app(config_path=None, settings_path=None, shutdown_callback=Non
                             )
                         elif "headers" in old:
                             item["headers"] = old.get("headers")
+                    if str(item.get("type") or "").strip().lower() == "smb":
+                        normalized = SMBReadOnlyConnector.validate_config(item)
+                        item["url"] = normalized["root"]
+                        item["max_depth"] = normalized["max_depth"]
+                        item["max_results"] = normalized["max_results"]
+                        item["allowed_extensions"] = sorted(normalized["extensions"])
+                        item["include_directories"] = normalized["include_directories"]
+                        item["access_scope"] = normalized["access_scope"]
+                        for access_key in ("allowed_staff_ids", "allowed_departments", "allowed_roles"):
+                            item[access_key] = normalized[access_key]
+                        item["read_only"] = True
                     merged.append(item)
                 incoming = merged
             data[section] = incoming
             return incoming
 
-        response_data = store.mutate(update)
+        try:
+            response_data = store.mutate(update)
+        except ValueError as exc:
+            return jsonify({"ok": False, "message": str(exc)}), 400
         if section == "connectors":
             safe_response = []
             for connector in response_data:
@@ -920,25 +943,74 @@ def create_admin_app(config_path=None, settings_path=None, shutdown_callback=Non
 
     @app.post("/api/connectors/test")
     def test_connector():
-        connector = request.get_json(silent=True) or {}
+        connector = dict(request.get_json(silent=True) or {})
+        old = next((item for item in store.load().get("connectors", [])
+                    if item.get("id") == connector.get("id")), None)
+        same_target = bool(old) and (
+            str(old.get("type") or "").strip().lower()
+            == str(connector.get("type") or "").strip().lower()
+            and normalize_endpoint(old.get("url")) == normalize_endpoint(connector.get("url"))
+        )
+        if same_target and str(connector.get("type") or "").strip().lower() == "smb":
+            same_target = (
+                str(old.get("username") or "").strip().casefold()
+                == str(connector.get("username") or "").strip().casefold()
+                and str(old.get("domain") or "").strip().casefold()
+                == str(connector.get("domain") or "").strip().casefold()
+            )
+        if same_target and not connector.get("auth_value"):
+            connector["auth_value"] = old.get("auth_value", "")
         if connector.get("type") in ("dingtalk", "ima"):
             return jsonify({"ok": True, "message": "内置连接器配置存在；实际连接状态请查看总览"})
         try:
+            if str(connector.get("type") or "").strip().lower() == "smb":
+                result = SMBReadOnlyConnector.test(connector, timeout=8)
+                observability_store().record_event(
+                    "connector", f"test:{connector.get('id', 'smb')}", "success",
+                    duration_ms=result.get("duration_ms", 0), actor_id="web-admin",
+                    detail="read_only=true",
+                )
+                return jsonify({"ok": True, "message": "NAS 连接成功（只读）", "result": result})
             result = HTTPConnectorExecutor.execute(connector, {"input": connector.get("test_input", "test")}, timeout=8)
             return jsonify({"ok": True, "message": f"HTTP {result['status_code']}", "result": result["data"]})
         except Exception as exc:
+            observability_store().record_event(
+                "connector", f"test:{connector.get('id', 'unknown')}", "error",
+                actor_id="web-admin", detail=type(exc).__name__,
+            )
             return jsonify({"ok": False, "message": f"连接失败：{str(exc)[:160]}"}), 502
 
     @app.post("/api/connectors/execute")
     def execute_connector():
         payload = request.get_json(silent=True) or {}
         connector = next((c for c in store.load().get("connectors", []) if c.get("id") == payload.get("id")), None)
-        if not connector or connector.get("type") != "http" or not connector.get("enabled", True):
+        if not connector or not connector.get("enabled", True):
             return jsonify({"ok": False, "message": "连接器不存在或未启用"}), 404
+        connector_type = str(connector.get("type") or "").strip().lower()
+        if connector_type not in {"http", "smb"}:
+            return jsonify({"ok": False, "message": "该连接器不支持手动查询"}), 400
+        started = time.perf_counter()
         try:
-            result = HTTPConnectorExecutor.execute(connector, payload.get("variables") or {})
+            variables = payload.get("variables") or {}
+            if connector_type == "smb":
+                action = str(payload.get("action") or "search").strip().lower()
+                if action != "search":
+                    return jsonify({"ok": False, "message": "NAS 连接器仅支持只读查询"}), 400
+                result = SMBReadOnlyConnector.search(connector, variables.get("query") or variables.get("input"), timeout=10)
+            else:
+                result = HTTPConnectorExecutor.execute(connector, variables)
+            observability_store().record_event(
+                "connector", f"query:{connector.get('id', connector_type)}", "success",
+                duration_ms=(time.perf_counter() - started) * 1000, actor_id="web-admin",
+                detail=f"type={connector_type};results={result.get('count', 1) if isinstance(result, dict) else 1}",
+            )
             return jsonify({"ok": True, "result": result})
         except Exception as exc:
+            observability_store().record_event(
+                "connector", f"query:{connector.get('id', connector_type)}", "error",
+                duration_ms=(time.perf_counter() - started) * 1000, actor_id="web-admin",
+                detail=type(exc).__name__,
+            )
             return jsonify({"ok": False, "message": str(exc)[:200]}), 502
 
     @app.get("/api/models")

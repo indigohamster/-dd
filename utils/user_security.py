@@ -116,7 +116,9 @@ class UserSecurityPolicy:
 
     PRIVATE_COMMAND_RE = re.compile(
         r"(?i)(?:我的(?:未处理)?工单|查看.*工单|工单状态|TKT-\d|网络状态|"
-        r"检测网络|网络检测|公网IP|本机IP|查\s*IP|测速|网速)"
+        r"检测网络|网络检测|公网IP|本机IP|查\s*IP|测速|网速|"
+        r"(?:查|找|搜索|查询).{0,12}(?:NAS|公共文件夹|共享文件夹|文件服务器)|"
+        r"(?:NAS|公共文件夹|共享文件夹|文件服务器).{0,12}(?:查|找|搜索|查询))"
     )
 
     def __init__(self, config: Mapping | None = None):
